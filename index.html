@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f4f2ee">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Hydro">
+<link rel="manifest" href="manifest.json">
+<title>Hydrométrie</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f4f2ee;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.09);
+    --text: #1a1a18;
+    --muted: #6b6b68;
+    --hint: #a8a8a4;
+    --blue: #2a6aba;
+    --teal: #0f7a5a;
+    --alert-bg: #fff5f5;
+    --alert-border: rgba(192,57,43,0.25);
+    --alert-text: #c0392b;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 24px);
+    max-width: 480px;
+    margin: 0 auto;
+    overscroll-behavior: none;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  header h1 { font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  .last-update { font-size: 11px; color: var(--hint); font-family: 'DM Mono', monospace; }
+
+  .notif-btn {
+    font-size: 18px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+  .notif-btn.active { opacity: 1; }
+  .notif-btn:active { transform: scale(0.9); }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .controls label { font-size: 13px; color: var(--muted); }
+
+  select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b6b68'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    flex: 1;
+  }
+
+  .rbtn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .rbtn:active { background: var(--bg); transform: scale(0.97); }
+
+  .alert-banner {
+    display: none;
+    align-items: flex-start;
+    gap: 8px;
+    background: var(--alert-text);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .alert-banner.visible { display: flex; }
+  .alert-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  .station-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 14px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .station-card.in-alert {
+    border-color: var(--alert-border);
+    background: var(--alert-bg);
+  }
+
+  .station-title {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 2px;
+  }
+
+  .alert-badge {
+    display: none;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--alert-text);
+    color: #fff;
+    letter-spacing: 0.04em;
+  }
+  .in-alert .alert-badge { display: inline-block; }
+
+  .station-riv { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .station-code { font-size: 11px; color: var(--hint); font-family: 'DM Mono', monospace; margin-top: 3px; margin-bottom: 0; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+  .measure-block { margin-bottom: 2px; }
+
+  .measure-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+
+  .measure-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--hint); white-space: nowrap; }
+
+  .threshold-row { display: flex; align-items: center; gap: 5px; }
+  .threshold-row label { font-size: 11px; color: var(--hint); }
+
+  .threshold-input {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    width: 70px;
+    padding: 4px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    text-align: right;
+    -webkit-appearance: none;
+  }
+  .threshold-input:focus { outline: none; border-color: rgba(42,106,186,0.4); }
+
+  .threshold-unit { font-size: 11px; color: var(--hint); }
+
+  .measure-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+
+  .big-num {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    font-family: 'DM Mono', monospace;
+    transition: color 0.2s;
+  }
+  .big-num.over-threshold { color: var(--alert-text); }
+
+  .big-unit { font-size: 13px; color: var(--muted); }
+
+  .measure-date {
+    font-size: 10px;
+    color: var(--hint);
+    font-family: 'DM Mono', monospace;
+    margin-bottom: 10px;
+  }
+
+  .chart-wrap { position: relative; width: 100%; height: 100px; }
+
+  .nodata { font-size: 12px; color: var(--hint); padding: 6px 0; font-style: italic; }
+  .loading-msg { font-size: 13px; color: var(--muted); padding: 24px 0; text-align: center; }
+  .err-msg { font-size: 12px; color: var(--alert-text); padding: 8px 0; }
+  .threshold-hint { font-size: 11px; color: var(--hint); margin-top: 6px; font-style: italic; }
+
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; position: relative; top: -1px; }
+  .dot-blue { background: var(--blue); }
+  .dot-teal { background: var(--teal); }
+
+  .offline-banner {
+    display: none;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px;
+    margin-bottom: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .offline-banner.visible { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hydrométrie</h1>
+  <div class="header-right">
+    <span class="last-update" id="update-time">—</span>
+    <button class="notif-btn" id="notif-btn" title="Activer les notifications">🔔</button>
+  </div>
+</header>
+
+<div id="offline-banner" class="offline-banner">Hors ligne — données en cache</div>
+
+<div id="alert-banner" class="alert-banner">
+  <span class="alert-icon">⚠</span>
+  <span id="alert-text"></span>
+</div>
+
+<div class="controls">
+  <label for="psel">Période :</label>
+  <select id="psel">
+    <option value="1">1 jour</option>
+    <option value="3">3 jours</option>
+    <option value="7" selected>7 jours</option>
+    <option value="14">14 jours</option>
+    <option value="30">30 jours</option>
+  </select>
+  <button class="rbtn" id="rbtn">Actualiser</button>
+</div>
+
+<div id="card1" class="station-card"><p class="loading-msg">Chargement…</p></div>
+<div id="card2" class="station-card"><p class="loading-msg">Chargement…</p></div>
+
+<script>
+const STATIONS = [
+  { code: 'O014402001', cardId: 'card1' },
+  { code: 'O016434001', cardId: 'card2' }
+];
+
+const charts = {};
+
+const thresholds = {};
+STATIONS.forEach(st => {
+  thresholds[st.code] = { Q: null, H: null };
+  try {
+    const saved = localStorage.getItem('thr_' + st.code);
+    if (saved) Object.assign(thresholds[st.code], JSON.parse(saved));
+  } catch(e) {}
+});
+
+function saveThresholds(code) {
+  try { localStorage.setItem('thr_' + code, JSON.stringify(thresholds[code])); } catch(e) {}
+}
+
+function days() { return parseInt(document.getElementById('psel').value, 10); }
+
+function fmtDt(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' UTC';
+}
+
+function convertQ(raw) { return raw / 1000; }
+function convertH(raw) { return raw / 1000; }
+
+function killChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function drawChart(cid, data, color, bgColor, unit, threshold) {
+  killChart(cid);
+  const el = document.getElementById(cid);
+  if (!el || !data.length) return;
+  const sorted = [...data].sort((a, b) => new Date(a.date_obs) - new Date(b.date_obs));
+  const labels = sorted.map(d => new Date(d.date_obs).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }));
+  const convert = unit === 'm³/s' ? convertQ : convertH;
+  const values = sorted.map(d => d.resultat_obs != null ? parseFloat(convert(d.resultat_obs).toFixed(4)) : null);
+
+  const datasets = [{
+    data: values,
+    borderColor: color,
+    borderWidth: 1.5,
+    pointRadius: 0,
+    tension: 0.3,
+    fill: true,
+    backgroundColor: bgColor,
+    spanGaps: true
+  }];
+
+  if (threshold !== null && threshold !== '' && !isNaN(parseFloat(threshold))) {
+    datasets.push({
+      data: labels.map(() => parseFloat(threshold)),
+      borderColor: 'rgba(192,57,43,0.6)',
+      borderWidth: 1,
+      borderDash: [4, 3],
+      pointRadius: 0,
+      fill: false,
+      tension: 0
+    });
+  }
+
+  charts[cid] = new Chart(el, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: i => i.datasetIndex === 0 && i.raw != null ? i.raw.toFixed(3) + ' ' + unit : null
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 5, maxRotation: 0, font: { size: 10, family: 'DM Mono' }, color: '#a8a8a4' },
+          grid: { display: false }, border: { display: false }
+        },
+        y: {
+          ticks: { maxTicksLimit: 4, font: { size: 10, family: 'DM Mono' }, color: '#a8a8a4', callback: v => v.toFixed(3) },
+          grid: { color: 'rgba(0,0,0,0.05)' }, border: { display: false }
+        }
+      }
+    }
+  });
+}
+
+async function getInfo(code) {
+  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=${code}&format=json`);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return (await r.json()).data?.[0] || null;
+}
+
+async function getObs(code, grd, d) {
+  const size = Math.min(d * 288, 20000);
+  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=${code}&grandeur_hydro=${grd}&size=${size}&sort=desc&fields=date_obs,resultat_obs`);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return (await r.json()).data || [];
+}
+
+function checkAlerts() {
+  const alerts = [];
+  STATIONS.forEach(st => {
+    const card = document.getElementById(st.cardId);
+    let cardAlert = false;
+    ['Q', 'H'].forEach(grd => {
+      const numEl = document.getElementById(st.cardId + '-num-' + grd);
+      if (!numEl) return;
+      const val = parseFloat(numEl.dataset.value);
+      const t = parseFloat(thresholds[st.code][grd]);
+      if (!isNaN(val) && !isNaN(t) && val > t) {
+        cardAlert = true;
+        const unit = grd === 'Q' ? 'm³/s' : 'm';
+        alerts.push(`${st.code} — ${grd === 'Q' ? 'Débit' : 'Hauteur'} : ${val.toFixed(3)} ${unit} > seuil ${t.toFixed(3)} ${unit}`);
+        numEl.classList.add('over-threshold');
+      } else if (numEl) {
+        numEl.classList.remove('over-threshold');
+      }
+    });
+    card.classList.toggle('in-alert', cardAlert);
+  });
+
+  const banner = document.getElementById('alert-banner');
+  if (alerts.length > 0) {
+    banner.classList.add('visible');
+    document.getElementById('alert-text').textContent = alerts.join('\n');
+    sendNotification(alerts);
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+// ── Notifications ──────────────────────────────────────────
+let notifEnabled = false;
+try { notifEnabled = localStorage.getItem('notif') === '1'; } catch(e) {}
+
+const notifBtn = document.getElementById('notif-btn');
+notifBtn.classList.toggle('active', notifEnabled);
+
+notifBtn.addEventListener('click', async () => {
+  if (!('Notification' in window)) {
+    alert('Les notifications ne sont pas supportées par ce navigateur.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    alert('Notifications bloquées. Activez-les dans les paramètres du navigateur.');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    notifEnabled = true;
+    try { localStorage.setItem('notif', '1'); } catch(e) {}
+    notifBtn.classList.add('active');
+    new Notification('Hydrométrie', { body: 'Notifications activées ✓', icon: 'icons/icon-192.png' });
+  } else {
+    notifEnabled = false;
+    try { localStorage.setItem('notif', '0'); } catch(e) {}
+    notifBtn.classList.remove('active');
+  }
+});
+
+let lastNotifTime = 0;
+function sendNotification(alerts) {
+  if (!notifEnabled || Notification.permission !== 'granted') return;
+  const now = Date.now();
+  if (now - lastNotifTime < 5 * 60 * 1000) return; // max 1 notif / 5 min
+  lastNotifTime = now;
+  new Notification('⚠ Seuil dépassé', {
+    body: alerts.join('\n'),
+    icon: 'icons/icon-192.png',
+    tag: 'hydro-alert'
+  });
+}
+
+// ── Offline ────────────────────────────────────────────────
+window.addEventListener('online',  () => document.getElementById('offline-banner').classList.remove('visible'));
+window.addEventListener('offline', () => document.getElementById('offline-banner').classList.add('visible'));
+if (!navigator.onLine) document.getElementById('offline-banner').classList.add('visible');
+
+// ── Rendu ──────────────────────────────────────────────────
+function renderCard(cardId, code, info, obsQ, obsH, d) {
+  const card = document.getElementById(cardId);
+  const name = info ? (info.libelle_station || info.libelle_site || code) : code;
+  const riv  = info ? (info.libelle_cours_eau || '') : '';
+  const lQ   = obsQ[0] || null;
+  const lH   = obsH[0] || null;
+  const valQ = lQ ? convertQ(lQ.resultat_obs) : null;
+  const valH = lH ? convertH(lH.resultat_obs) : null;
+  const thr  = thresholds[code];
+
+  const thrField = (cid, grd, unit) => `
+    <div class="threshold-row">
+      <label>seuil</label>
+      <input type="number" step="0.001" min="0" inputmode="decimal"
+        class="threshold-input" id="thr-${cid}-${grd}"
+        value="${thr[grd] !== null ? thr[grd] : ''}" placeholder="—">
+      <span class="threshold-unit">${unit}</span>
+    </div>`;
+
+  card.innerHTML = `
+    <div class="station-title">
+      <span>${name}</span>
+      <span class="alert-badge">SEUIL DÉPASSÉ</span>
+    </div>
+    ${riv ? `<div class="station-riv">${riv}</div>` : ''}
+    <div class="station-code">${code}</div>
+
+    <hr class="divider">
+    <div class="measure-block">
+      <div class="measure-header">
+        <div class="measure-label"><span class="dot dot-blue"></span>Débit</div>
+        ${thrField(cardId, 'Q', 'm³/s')}
+      </div>
+      ${!obsQ.length ? '<p class="nodata">Pas de données débit</p>' : `
+        <div class="measure-row">
+          <span class="big-num" id="${cardId}-num-Q" data-value="${valQ !== null ? valQ.toFixed(4) : ''}">${valQ !== null ? valQ.toFixed(3) : '—'}</span>
+          <span class="big-unit">m³/s</span>
+        </div>
+        <div class="measure-date">${lQ ? fmtDt(lQ.date_obs) : ''}</div>
+        <div class="chart-wrap"><canvas id="${cardId}-Q" role="img" aria-label="Courbe débit ${d}j"></canvas></div>
+      `}
+      <p class="threshold-hint">Laissez vide pour désactiver l'alerte</p>
+    </div>
+
+    <hr class="divider">
+    <div class="measure-block">
+      <div class="measure-header">
+        <div class="measure-label"><span class="dot dot-teal"></span>Hauteur</div>
+        ${thrField(cardId, 'H', 'm')}
+      </div>
+      ${!obsH.length ? '<p class="nodata">Pas de données hauteur</p>' : `
+        <div class="measure-row">
+          <span class="big-num" id="${cardId}-num-H" data-value="${valH !== null ? valH.toFixed(4) : ''}">${valH !== null ? valH.toFixed(3) : '—'}</span>
+          <span class="big-unit">m</span>
+        </div>
+        <div class="measure-date">${lH ? fmtDt(lH.date_obs) : ''}</div>
+        <div class="chart-wrap"><canvas id="${cardId}-H" role="img" aria-label="Courbe hauteur ${d}j"></canvas></div>
+      `}
+      <p class="threshold-hint">Laissez vide pour désactiver l'alerte</p>
+    </div>`;
+
+  if (obsQ.length) drawChart(cardId+'-Q', obsQ, '#2a6aba', 'rgba(42,106,186,0.08)', 'm³/s', thr.Q);
+  if (obsH.length) drawChart(cardId+'-H', obsH, '#0f7a5a', 'rgba(15,122,90,0.08)', 'm',     thr.H);
+
+  checkAlerts();
+
+  ['Q','H'].forEach(grd => {
+    const input = document.getElementById(`thr-${cardId}-${grd}`);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const v = input.value.trim();
+      thresholds[code][grd] = v === '' ? null : parseFloat(v);
+      saveThresholds(code);
+      const obs   = grd === 'Q' ? obsQ : obsH;
+      const color = grd === 'Q' ? '#2a6aba' : '#0f7a5a';
+      const bg    = grd === 'Q' ? 'rgba(42,106,186,0.08)' : 'rgba(15,122,90,0.08)';
+      const unit  = grd === 'Q' ? 'm³/s' : 'm';
+      if (obs.length) drawChart(cardId+'-'+grd, obs, color, bg, unit, thresholds[code][grd]);
+      checkAlerts();
+    });
+  });
+}
+
+async function loadStation(st) {
+  document.getElementById(st.cardId).innerHTML = '<p class="loading-msg">Chargement…</p>';
+  const d = days();
+  try {
+    const [info, obsQ, obsH] = await Promise.all([
+      getInfo(st.code),
+      getObs(st.code, 'Q', d),
+      getObs(st.code, 'H', d)
+    ]);
+    renderCard(st.cardId, st.code, info, obsQ, obsH, d);
+  } catch(e) {
+    document.getElementById(st.cardId).innerHTML = `<p class="err-msg">Erreur : ${e.message}</p>`;
+  }
+}
+
+function loadAll() {
+  document.getElementById('update-time').textContent =
+    new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  STATIONS.forEach(loadStation);
+}
+
+document.getElementById('psel').addEventListener('change', loadAll);
+document.getElementById('rbtn').addEventListener('click', loadAll);
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+loadAll();
+</script>
+</body>
+</html>
