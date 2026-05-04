@@ -1,4 +1,4 @@
-const CACHE = 'hydro-v2';
+const CACHE = 'hydro-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -23,14 +23,21 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch : network-only pour l'API Hub'Eau (jamais de cache), cache-first pour les assets
+// Fetch : cache-first pour les assets, network-first pour l'API Hub'Eau
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // API Hub'Eau : toujours réseau, pas de mise en cache
-  // (chaque requête doit refléter la période choisie par l'utilisateur)
+  // API Hub'Eau : network-first, fallback cache si offline
   if (url.hostname === 'hubeau.eaufrance.fr') {
-    e.respondWith(fetch(e.request));
+    e.respondWith(
+      fetch(e.request)
+        .then(resp => {
+          const clone = resp.clone();
+          caches.open(CACHE).then(cache => cache.put(e.request, clone));
+          return resp;
+        })
+        .catch(() => caches.match(e.request))
+    );
     return;
   }
 
