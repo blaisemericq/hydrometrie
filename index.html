@@ -277,8 +277,7 @@
 
 <script>
 const STATIONS = [
-  { code: 'O014402001', cardId: 'card1' },
-  { code: 'O016434001', cardId: 'card2' }
+  { code: 'O017402501', cardId: 'card1' }
 ];
 
 const charts = {};
@@ -311,23 +310,14 @@ function killChart(id) {
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
 }
 
-function fmtLabel(dt, d) {
-  if (d <= 1) return dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  if (d <= 3) return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-                + ' ' + dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-}
-
 function drawChart(cid, data, color, bgColor, unit, threshold) {
   killChart(cid);
   const el = document.getElementById(cid);
   if (!el || !data.length) return;
-  const d = days();
   const sorted = [...data].sort((a, b) => new Date(a.date_obs) - new Date(b.date_obs));
-  const labels = sorted.map(pt => fmtLabel(new Date(pt.date_obs), d));
-  const tooltipLabels = sorted.map(pt => fmtDt(pt.date_obs));
+  const labels = sorted.map(d => new Date(d.date_obs).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }));
   const convert = unit === 'm³/s' ? convertQ : convertH;
-  const values = sorted.map(pt => pt.resultat_obs != null ? parseFloat(convert(pt.resultat_obs).toFixed(4)) : null);
+  const values = sorted.map(d => d.resultat_obs != null ? parseFloat(convert(d.resultat_obs).toFixed(4)) : null);
 
   const datasets = [{
     data: values,
@@ -363,14 +353,13 @@ function drawChart(cid, data, color, bgColor, unit, threshold) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: items => tooltipLabels[items[0].dataIndex] || '',
             label: i => i.datasetIndex === 0 && i.raw != null ? i.raw.toFixed(3) + ' ' + unit : null
           }
         }
       },
       scales: {
         x: {
-          ticks: { maxTicksLimit: d <= 1 ? 6 : 5, maxRotation: 0, font: { size: 10, family: 'DM Mono' }, color: '#a8a8a4' },
+          ticks: { maxTicksLimit: 5, maxRotation: 0, font: { size: 10, family: 'DM Mono' }, color: '#a8a8a4' },
           grid: { display: false }, border: { display: false }
         },
         y: {
@@ -383,14 +372,14 @@ function drawChart(cid, data, color, bgColor, unit, threshold) {
 }
 
 async function getInfo(code) {
-  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=${code}&format=json&_=${Date.now()}`);
+  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=${code}&format=json`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return (await r.json()).data?.[0] || null;
 }
 
 async function getObs(code, grd, d) {
   const size = Math.min(d * 288, 20000);
-  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=${code}&grandeur_hydro=${grd}&size=${size}&sort=desc&fields=date_obs,resultat_obs&_=${Date.now()}`);
+  const r = await fetch(`https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=${code}&grandeur_hydro=${grd}&size=${size}&sort=desc&fields=date_obs,resultat_obs`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return (await r.json()).data || [];
 }
